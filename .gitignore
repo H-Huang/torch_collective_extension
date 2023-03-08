@@ -1,0 +1,15 @@
+*.o
+*.ko
+*.obj
+*.elf
+
+*.so
+*.so.*
+
+*.egg-info
+build/
+dist/
+*.pyc
+
+*.code-workspace
+.vscode
