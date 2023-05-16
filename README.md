@@ -1,37 +1,27 @@
-# dummy_collectives
+# torch collective extension
 
-A minimum demo for PyTorch c10d extension APIs
+A minimum demo for PyTorch distributed extension functionality for collectives.
 
-## Build
+This repository contains miminal implementation of two different workflows for extending `torch.distributed` collectives in C++.
 
-```python setup.py develop```
+1. Custom Backend Implementation (`custom_backend`) (new workflow, recommended)
 
-## Usage
+2. Custom Process Group Implementation (`custom_process_group`) (old workflow, deprecated)
 
-```python
-import os
+See the READMEs in each folder for more details.
 
-import torch
-import dummy_collectives
+### FAQ
 
-import torch.distributed as dist
+Why are there two different workflows?
 
-os.environ['MASTER_ADDR'] = 'localhost'
-os.environ['MASTER_PORT'] = '29500'
+- With the introduction of dispatchable collectives in PyTorch 2.0, pytorch distributed collectives allow routing to different backends based on the device type of the tensor arguments. `custom_process_group` was the old extension method and 
+`custom_backend` is the new extension method.
 
-dist.init_process_group("dummy", rank=0, world_size=1)
+What are the differences?
 
-x = torch.ones(6)
-dist.all_reduce(x)
-print(f"cpu allreduce: {x}")
+- `custom_backend` is the more flexible alternative as it allows users to route to respective backend based on device type. For example `init_process_group(backend="cpu:gloo,cuda:dummy", ...)` will dispatch collectives with cpu tensor arguments to gloo and 
+cuda tensor arguments to dummy. On the other hand, `custom_process_group` is more limited as it only allows users to route to a single backend.
 
-if torch.cuda.is_available():
-    y = x.cuda()
-    dist.all_reduce(y)
-    print(f"cuda allreduce: {y}")
+Which one should I use?
 
-try:
-    dist.broadcast(x, 0)
-except RuntimeError:
-    print("got RuntimeError when calling broadcast")
-```
+- We recommend using the `custom_backend` implementation.
