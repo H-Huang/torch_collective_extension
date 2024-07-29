@@ -1,5 +1,6 @@
 #include "dummy.hpp"
 #include <iostream>
+#include <torch/csrc/distributed/c10d/ProcessGroup.hpp>
 
 namespace c10d {
 
@@ -156,5 +157,56 @@ c10::intrusive_ptr<Backend> BackendDummy::createBackendDummy(
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("createBackendDummy", &BackendDummy::createBackendDummy);
 }
+
+#define IMPL_ALLREDUCE(DEV)                                                   \
+  std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<Work>>               \
+      allreduce_##DEV(                                                        \
+          at::TensorList tensors,                                             \
+          const c10::intrusive_ptr<ProcessGroup>& process_group,              \
+          const c10::intrusive_ptr<ReduceOp>& reduce_op,                      \
+          const c10::optional<at::Tensor>& sparse_indices,                    \
+          int64_t timeout) {                                                  \
+    std::cout << "My custom c++ meta allreduce!" << std::endl;                \
+    auto tensor_vec = tensors.vec();                                          \
+    auto work = process_group->getBackend(c10::DeviceType::DEV) -> allreduce( \
+        tensor_vec,                                                           \
+        AllreduceOptions{                                                     \
+            *reduce_op.get(), std::chrono::milliseconds(timeout)});           \
+    return std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<Work>>(     \
+        std::move(tensor_vec), work);                                         \
+  }
+
+IMPL_ALLREDUCE(CPU)
+
+TORCH_LIBRARY_IMPL(c10d, Meta, m) {
+    m.impl("allreduce_", allreduce_CPU);
+}
+
+// #define IMPL_BROADCAST(DEV)                                                   \
+//   std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<Work>>               \
+//       broadcast_##DEV(                                                        \
+//           at::TensorList tensors,                                             \
+//           const c10::intrusive_ptr<ProcessGroup>& process_group,              \
+//           int64_t root_rank,                                                  \
+//           int64_t root_tensor,                                                \
+//           bool asyncOp,                                                       \
+//           int64_t timeout) {                                                  \
+//     auto tensor_vec = tensors.vec();                                          \
+//     auto work = process_group->getBackend(c10::DeviceType::DEV) -> broadcast( \
+//         tensor_vec,                                                           \
+//         BroadcastOptions{                                                     \
+//             root_rank,                                                        \
+//             root_tensor,                                                      \
+//             std::chrono::milliseconds(timeout),                               \
+//             asyncOp});                                                        \
+//     return std::tuple<std::vector<at::Tensor>, c10::intrusive_ptr<Work>>(     \
+//         std::move(tensor_vec), work);                                         \
+//   }
+
+// IMPL_BROADCAST(CPU)
+
+// TORCH_LIBRARY_IMPL(c10d, Meta, m) {
+//     m.impl("broadcast_", broadcast_CPU);
+// }
 
 } // namespace c10d

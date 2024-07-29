@@ -5,23 +5,25 @@ import dummy_collectives
 
 import torch.distributed as dist
 
+from torch._subclasses.fake_tensor import FakeTensorMode
+from transformers import AutoModelForCausalLM, LlamaConfig
+from torch.nn.parallel import DistributedDataParallel as DDP
+
 os.environ['MASTER_ADDR'] = 'localhost'
 os.environ['MASTER_PORT'] = '29500'
 
-dist.init_process_group("cpu:gloo,cuda:dummy", rank=0, world_size=1)
+dist.init_process_group("cpu:dummy", rank=0, world_size=1)
 
-# this goes through gloo
-x = torch.ones(6)
-dist.all_reduce(x)
-print(f"cpu allreduce: {x}")
+fake_mode = FakeTensorMode()
 
-# this goes through dummy
-if torch.cuda.is_available():
-    y = x.cuda()
-    dist.all_reduce(y)
-    print(f"cuda allreduce: {y}")
+model_config = LlamaConfig()
 
-    try:
-        dist.broadcast(y, 0)
-    except RuntimeError:
-        print("got RuntimeError when calling broadcast")
+bs = 4
+seq_len = 512
+
+with fake_mode:
+  model = AutoModelForCausalLM.from_config(model_config)
+  ddp_model = DDP(model)
+  x = torch.randint(model_config.vocab_size, size=(bs, seq_len), dtype=torch.long)
+  loss = ddp_model(x).logits.sum()
+  loss.backward()
